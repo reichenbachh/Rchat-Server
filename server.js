@@ -1,50 +1,41 @@
-const express = require("express");
-const uuid = require("uuid");
-const Faker = require("faker");
-const helmet = require("helmet");
-const http = require("http");
-const color = require("colors");
-const morgan = require("morgan");
-const cors = require("cors");
-const dotEnv = require("dotenv");
-const dbAccess = require("./firebaseDatabaseClass");
+const express = require('express');
+const uuid = require('uuid');
+const Faker = require('faker');
+const helmet = require('helmet');
+const http = require('http');
+const color = require('colors');
+const morgan = require('morgan');
+const cors = require('cors');
+const dotEnv = require('dotenv');
+const dbAccess = require('./firebaseDatabaseClass');
+const { calcAndReturnDistance } = require('./utility');
 
 //loading env vars
-dotEnv.config({ path: "./config.env" });
+dotEnv.config({ path: './config.env' });
 
 //creating server instance
 const app = express();
 //creating http server
 const server = http.createServer(app);
 
-app.use(cors({ origin: "http://localhost:3000" }));
+app.use(cors({ origin: 'http://localhost:3000' }));
 app.use(helmet());
-app.use(morgan("dev"));
+app.use(morgan('dev'));
 app.use(express.json());
-
-const io = require("socket.io")(server, {
-  cors: { origin: "*" },
-});
-io.on("connection", (socket) => {
-  console.log("user is connected");
-
-  socket.on("message", (data) => {
-    /* … */
-  });
-  socket.on("disconnect", () => {
-    /* … */
-  });
-});
 
 //database Access
 const db = new dbAccess();
 db.initialiseApp();
 
-app.get("/createRoom", (req, res) => {
-  try {
-    //get todays date
-    let today = new Date().toDateString();
+//create io instance
+const io = require('socket.io')(server, {
+  cors: { origin: '*' },
+});
+io.on('connection', (socket) => {
+  console.log('new WS handshake');
 
+  //create room connection
+  socket.on('createRoom', ({ roomName, lon, lat }) => {
     //generate username
     let userName = Faker.internet.userName();
 
@@ -54,27 +45,57 @@ app.get("/createRoom", (req, res) => {
     let roomData = {
       roomID: `room-${uuid.v4()}`,
       roomCreator: userName,
-      createdAt: today,
+      roomName: roomName,
+      coordinates: {
+        lon,
+        lat,
+      },
+      messages: {},
     };
     db.writeToDB(roomData);
-    db.addUserToDb(userName, userId);
-    res
-      .status(200)
-      .json({ success: true, msg: "room created", user: { userName, userId } });
-  } catch (error) {
-    console.log(error);
-    res.status(401).json({ success: false, msg: "something went wrong" });
-  }
-});
+    db.addUserToDb(userName, roomName, userId);
+    console.log('user and room created');
+    io.sockets.emit('user_room_created', {
+      userName,
+      roomName,
+      roomID: roomData.roomID,
+    });
+    socket.join(roomName);
+    socket.broadcast
+      .to(roomName)
+      .emit('userJoin', `${userName} has joined the room`);
+  });
 
-app.post("/chatExists", async (req, res) => {
-  let userId = req.body.userId;
-  const userExists = db.fetchUser(userId);
-  if (userExists === "no such user exists") {
-    return res.status(401).json({ success: false, msg: "no user" });
-  }
-  console.log(await userExists);
-  res.status(200).json({ success: true, user: await userExists });
+  //send and persist message data
+  socket.on('send_message', (messageObject, roomID) => {
+    db.persistMessageToDb(messageObject, roomID);
+  });
+
+  socket.on('fetchMessages', async (roomID) => {
+    let messages = await db.fetchMessage(roomID);
+    io.sockets.emit('readMessage', messages);
+    console.log(messages);
+  });
+
+  //get all available rooms based on loaction
+  socket.on('getRooms', async ({ longitude, latitude }) => {
+    const rooms = await db.fetchAllRooms();
+    let nearRooms = await calcAndReturnDistance(
+      rooms.val(),
+      longitude,
+      latitude
+    );
+    socket.emit('rooms-fected', nearRooms);
+  });
+
+  socket.on('joinRoom', async ({ lon, lat }) => {
+    const rooms = await db.fetchAllRooms();
+
+    /* … */
+  });
+  socket.on('disconnect', () => {
+    /* … */
+  });
 });
 
 const PORT = process.env.PORT || 8080;
