@@ -1,6 +1,5 @@
 const admin = require('firebase-admin');
 const serviceAccount = require('./rchat-5ff88-firebase-adminsdk-7s4p3-ef4e7694d5.json');
-const { once } = require('nodemon');
 const url = 'https://rchat-5ff88-default-rtdb.firebaseio.com';
 
 class Firebase {
@@ -25,12 +24,10 @@ class Firebase {
     const db = admin.database();
   };
 
-  fetchMessage = async (roomID) => {
+  fetchMessage = (roomID) => {
     const db = admin.database();
-    const roomMessageRef = await db
-      .ref(`/rooms/${roomID}/Messages`)
-      .once('value', (snapShot) => {});
-    return roomMessageRef.val();
+    const roomMessageRef = db.ref(`/rooms/${roomID}/Messages`);
+    return roomMessageRef;
   };
 
   persistMessageToDb = (messageObject, roomID) => {

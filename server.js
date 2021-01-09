@@ -72,9 +72,10 @@ io.on('connection', (socket) => {
   });
 
   socket.on('fetchMessages', async (roomID) => {
-    let messages = await db.fetchMessage(roomID);
-    io.sockets.emit('readMessage', messages);
-    console.log(messages);
+    db.fetchMessage(roomID).on('value', (snapShot) => {
+      io.sockets.emit('readMessage', snapShot.val());
+      console.log(snapShot.val());
+    });
   });
 
   //get all available rooms based on loaction
