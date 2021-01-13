@@ -13,15 +13,15 @@ class Firebase {
     });
   };
 
-  writeToDB = (roomData) => {
+  writeToDB = async (roomData) => {
     const db = admin.database();
-    console.log(roomData);
     const messageRef = db.ref('/rooms').child(roomData.roomID);
-    messageRef.update(roomData);
+    await messageRef.update(roomData);
   };
 
-  readFromDB = () => {
+  getUserCount = async (roomID) => {
     const db = admin.database();
+    return db.ref(`/rooms/${roomID}/users`);
   };
 
   fetchMessage = (roomID) => {
@@ -30,18 +30,37 @@ class Firebase {
     return roomMessageRef;
   };
 
-  persistMessageToDb = (messageObject, roomID) => {
+  persistMessageToDb = async (messageObject) => {
+    console.log(messageObject);
     const db = admin.database();
     const messageRef = db
       .ref(`/rooms/${messageObject.roomID}`)
       .child('Messages');
-    messageRef.push(messageObject.messageObject);
+    await messageRef.push(messageObject);
   };
 
-  addUserToDb = (userName, roomName, userId) => {
+  removeFromDB = (parentRef, parentId, childId, addressString) => {
+    const db = admin.database();
+    const dataRef = db.ref(
+      `/${parentRef}/${parentId}/${addressString}/${childId}`
+    );
+    dataRef.remove();
+  };
+
+  addUserToDb = async (userName, roomID, userId) => {
     const db = admin.database();
     const userRef = db.ref('/activeUsers').child(userId);
-    userRef.update({ userName, roomName });
+    const messageUsersRef = await db
+      .ref(`/rooms/${roomID}/users`)
+      .child(userId)
+      .set({ userId });
+    await userRef.update({ userName, roomID });
+  };
+
+  deleteRoom = async (roomID) => {
+    const db = admin.database();
+    const roomRef = db.ref(`/rooms/${roomID}`);
+    await roomRef.remove();
   };
 
   fetchAllRooms = () => {

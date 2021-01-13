@@ -56,3 +56,30 @@ exports.calcAndReturnDistance = async (
   });
   return nearRoomsArray;
 };
+
+exports.generateNotification = (type, user, roomID) => {
+  if (type === 'join') {
+    return {
+      text: `${user} has joined the conversation`,
+      timestamp: Date.now(),
+      type: 'notification',
+      roomID,
+    };
+  }
+  if (type === 'leave') {
+    return {
+      text: `${user} has left the conversation`,
+      timestamp: Date.now(),
+      type: 'notification',
+      roomID,
+    };
+  }
+  if (type === 'create') {
+    return {
+      text: `${user} has created the conversation`,
+      timestamp: Date.now(),
+      type: 'notification',
+      roomID,
+    };
+  }
+};

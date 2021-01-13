@@ -8,7 +8,7 @@ const morgan = require('morgan');
 const cors = require('cors');
 const dotEnv = require('dotenv');
 const dbAccess = require('./firebaseDatabaseClass');
-const { calcAndReturnDistance } = require('./utility');
+const { calcAndReturnDistance, generateNotification } = require('./utility');
 
 //loading env vars
 dotEnv.config({ path: './config.env' });
@@ -35,35 +35,41 @@ io.on('connection', (socket) => {
   console.log('new WS handshake');
 
   //create room connection
-  socket.on('createRoom', ({ roomName, lon, lat }) => {
+  socket.on('createRoom', async ({ roomName, lon, lat }) => {
     //generate username
     let userName = Faker.internet.userName();
 
     //generate user id
     let userId = uuid.v4();
     //generate room data
+
+    let roomID = `room-${uuid.v4()}`;
+
     let roomData = {
-      roomID: `room-${uuid.v4()}`,
+      roomID,
       roomCreator: userName,
       roomName: roomName,
+      users: {},
       coordinates: {
         lon,
         lat,
       },
       messages: {},
     };
-    db.writeToDB(roomData);
-    db.addUserToDb(userName, roomName, userId);
+    //write room data to database
+    await db.writeToDB(roomData);
+    //add user to database
+    await db.addUserToDb(userName, roomID, userId);
+    //add user notification to messages
+    await db.persistMessageToDb(
+      generateNotification('create', userName, roomID)
+    );
     console.log('user and room created');
     io.sockets.emit('user_room_created', {
       userName,
       roomName,
       roomID: roomData.roomID,
     });
-    socket.join(roomName);
-    socket.broadcast
-      .to(roomName)
-      .emit('userJoin', `${userName} has joined the room`);
   });
 
   //send and persist message data
@@ -89,10 +95,32 @@ io.on('connection', (socket) => {
     socket.emit('rooms-fected', nearRooms);
   });
 
-  socket.on('joinRoom', async ({ lon, lat }) => {
-    const rooms = await db.fetchAllRooms();
+  socket.on('joinRoom', async ({ roomID, roomName }) => {
+    //generate username
+    let userName = Faker.internet.userName();
 
+    //generate user id
+    let userId = uuid.v4();
+
+    db.addUserToDb(userName, roomID, userId);
+    io.sockets.emit('user_room_created', {
+      userName,
+      userId,
+      roomName,
+      roomID,
+    });
     /* … */
+  });
+
+  socket.on('leaveRoom', async ({ roomID, userID }) => {
+    let roomUserRef = await db.getUserCount(roomID);
+    roomUserRef.once('value', (snapShot) => {
+      let roomCount = Object.keys(snapShot.val()).length;
+      if (roomCount <= 1) {
+        db.deleteRoom(roomID);
+      }
+      db.removeFromDB('rooms', roomID, userID, 'users');
+    });
   });
   socket.on('disconnect', () => {
     /* … */
